@@ -1,0 +1,369 @@
+local Library = {}
+Library.__index = Library
+
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local CoreGui = game:GetService("CoreGui")
+local Players = game:GetService("Players")
+local TweenInfo = TweenService:GetValue(0, Enum.EasingStyle.Quint, Enum.EasingDirection.Out)
+
+local Player = Players.LocalPlayer
+local Mouse = Player:GetMouse()
+
+local Themes = {
+    Dark = {Background = Color3.fromRGB(15,15,20), Sidebar = Color3.fromRGB(20,20,25), TitleBar = Color3.fromRGB(25,25,30), Accent = Color3.fromRGB(0,170,255), Text = Color3.new(1,1,1), SecondaryText = Color3.fromRGB(180,180,180), Button = Color3.fromRGB(40,40,45), Hover = Color3.fromRGB(55,55,60)},
+    Light = {Background = Color3.fromRGB(245,245,250), Sidebar = Color3.fromRGB(230,230,235), TitleBar = Color3.fromRGB(220,220,225), Accent = Color3.fromRGB(0,120,215), Text = Color3.fromRGB(30,30,30), SecondaryText = Color3.fromRGB(80,80,80), Button = Color3.fromRGB(210,210,220), Hover = Color3.fromRGB(200,200,210)},
+    Purple = {Background = Color3.fromRGB(30,20,45), Sidebar = Color3.fromRGB(40,25,55), TitleBar = Color3.fromRGB(50,30,70), Accent = Color3.fromRGB(180,80,255), Text = Color3.new(1,1,1), SecondaryText = Color3.fromRGB(200,180,255), Button = Color3.fromRGB(70,50,90), Hover = Color3.fromRGB(90,60,110)},
+    Red = {Background = Color3.fromRGB(35,20,20), Sidebar = Color3.fromRGB(45,25,25), TitleBar = Color3.fromRGB(60,30,30), Accent = Color3.fromRGB(255,80,80), Text = Color3.new(1,1,1), SecondaryText = Color3.fromRGB(220,180,180), Button = Color3.fromRGB(80,40,40), Hover = Color3.fromRGB(100,50,50)},
+    Ocean = {Background = Color3.fromRGB(15,25,40), Sidebar = Color3.fromRGB(20,35,55), TitleBar = Color3.fromRGB(25,45,70), Accent = Color3.fromRGB(0,200,255), Text = Color3.new(1,1,1), SecondaryText = Color3.fromRGB(180,220,255), Button = Color3.fromRGB(40,60,85), Hover = Color3.fromRGB(50,80,110)},
+    RGB = {Background = Color3.fromRGB(0,0,0), Sidebar = Color3.fromRGB(255,0,255), TitleBar = Color3.fromRGB(0,255,255), Accent = Color3.fromRGB(255,0,0), Text = Color3.new(1,1,1), SecondaryText = Color3.fromRGB(255,255,255), Button = Color3.fromRGB(0,0,0), Hover = Color3.fromRGB(255,255,255)}
+}
+
+local CurrentTheme = Themes.Dark
+
+local function RoundedFrame(parent, size, color, corner)
+    local f = Instance.new("Frame")
+    f.Size = size or UDim2.new(1,0,1,0)
+    f.BackgroundColor3 = color or Color3.new(1,1,1)
+    f.BorderSizePixel = 0
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0, corner or 12)
+    c.Parent = f
+    f.Parent = parent
+    return f
+end
+
+local function RoundedButton(parent, text, color, callback)
+    local b = Instance.new("TextButton")
+    b.Size = UDim2.new(1,0,0,42)
+    b.BackgroundColor3 = color or CurrentTheme.Button
+    b.Text = text
+    b.TextColor3 = CurrentTheme.Text
+    b.Font = Enum.Font.GothamSemibold
+    b.TextSize = 14
+    b.Parent = parent
+    local c = Instance.new("UICorner")
+    c.CornerRadius = UDim.new(0,8)
+    c.Parent = b
+    b.MouseButton1Click:Connect(callback or function() end)
+    b.MouseEnter:Connect(function() TweenService:Create(b, TweenInfo.new(0.2), {BackgroundColor3 = CurrentTheme.Hover}):Play() end)
+    b.MouseLeave:Connect(function() TweenService:Create(b, TweenInfo.new(0.2), {BackgroundColor3 = CurrentTheme.Button}):Play() end)
+    return b
+end
+
+local function SpringToggle(parent, text, default, callback)
+    local t = {State = default or false}
+    local frame = RoundedFrame(parent, UDim2.new(1,0,0,42), CurrentTheme.Button)
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(0.7,0,1,0)
+    label.BackgroundTransparency = 1
+    label.Text = text
+    label.TextColor3 = CurrentTheme.Text
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.Font = Enum.Font.Gotham
+    label.TextSize = 14
+    label.Parent = frame
+
+    local switch = RoundedFrame(frame, UDim2.new(0,42,0,22), Color3.fromRGB(80,80,80))
+    local knob = RoundedFrame(switch, UDim2.new(0,18,0,18), Color3.new(1,1,1))
+    knob.Position = UDim2.new(0,2,0.5,-9)
+
+    local function toggle()
+        t.State = not t.State
+        callback(t.State)
+        TweenService:Create(switch, TweenInfo.new(0.3, Enum.EasingStyle.Quad), {BackgroundColor3 = t.State and CurrentTheme.Accent or Color3.fromRGB(80,80,80)}):Play()
+        TweenService:Create(knob, TweenInfo.new(0.3, Enum.EasingStyle.Quad), {Position = t.State and UDim2.new(1,-20,0.5,-9) or UDim2.new(0,2,0.5,-9)}):Play()
+    end
+
+    frame.InputBegan:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseButton1 then toggle() end
+    end)
+
+    function t:Update(newText)
+        label.Text = newText
+    end
+    return t
+end
+
+local function DraggableSlider(parent, text, min, max, default, callback)
+    local s = {Value = default or 0}
+    local frame = RoundedFrame(parent, UDim2.new(1,0,0,52), CurrentTheme.Button)
+    local label = Instance.new("TextLabel")
+    label.Size = UDim2.new(1,0,0,20)
+    label.BackgroundTransparency = 1
+    label.Text = text .. ": " .. s.Value
+    label.TextColor3 = CurrentTheme.Text
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.Font = Enum.Font.Gotham
+    label.TextSize = 14
+    label.Parent = frame
+
+    local bar = RoundedFrame(frame, UDim2.new(1,-30,0,8), Color3.fromRGB(60,60,70))
+    bar.Position = UDim2.new(0,15,0.65,0)
+    local fill = RoundedFrame(bar, UDim2.new(0,0,1,0), CurrentTheme.Accent)
+    local knob = RoundedFrame(bar, UDim2.new(0,16,0,16), Color3.new(1,1,1))
+    knob.Position = UDim2.new(0, -8, 0.5, -8)
+
+    local dragging = false
+    local function update(pos)
+        local p = math.clamp((pos - bar.AbsolutePosition.X) / bar.AbsoluteSize.X, 0, 1)
+        s.Value = math.floor(min + (max - min) * p)
+        label.Text = text .. ": " .. s.Value
+        fill.Size = UDim2.new(p,0,1,0)
+        knob.Position = UDim2.new(p, -8, 0.5, -8)
+        callback(s.Value)
+    end
+
+    bar.InputBegan:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then dragging = true update(i.Position) end end)
+    UserInputService.InputChanged:Connect(function(i) if dragging and i.UserInputType == Enum.UserInputType.MouseMovement then update(i.Position) end end)
+    UserInputService.InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end end)
+
+    function s:Update(newValue)
+        s.Value = newValue
+        label.Text = text .. ": " .. s.Value
+        local p = (s.Value - min) / (max - min)
+        fill.Size = UDim2.new(p,0,1,0)
+        knob.Position = UDim2.new(p, -8, 0.5, -8)
+    end
+    return s
+end
+
+function Library:CreateLib(title, themeName)
+    local self = setmetatable({}, Library)
+    CurrentTheme = Themes[themeName] or Themes.Dark
+
+    local blur = Instance.new("BlurEffect")
+    blur.Size = 12
+    blur.Parent = CoreGui
+
+    local ScreenGui = Instance.new("ScreenGui")
+    ScreenGui.Name = "AestheticLib"
+    ScreenGui.ResetOnSpawn = false
+    ScreenGui.Parent = CoreGui
+
+    local MainFrame = RoundedFrame(ScreenGui, UDim2.new(0,680,0,480), CurrentTheme.Background, 16)
+    MainFrame.Position = UDim2.new(0.5,-340,0.5,-240)
+    MainFrame.BackgroundTransparency = 0.15
+    MainFrame.Visible = false
+
+    local TopBar = RoundedFrame(MainFrame, UDim2.new(1,0,0,50), CurrentTheme.TitleBar, 16)
+    local Title = Instance.new("TextLabel")
+    Title.Size = UDim2.new(1,-100,1,0)
+    Title.BackgroundTransparency = 1
+    Title.Text = title
+    Title.TextColor3 = CurrentTheme.Text
+    Title.TextScaled = true
+    Title.Font = Enum.Font.GothamBold
+    Title.Parent = TopBar
+
+    local MinBtn = Instance.new("TextButton")
+    MinBtn.Size = UDim2.new(0,30,0,30)
+    MinBtn.Position = UDim2.new(1,-130,0.5,-15)
+    MinBtn.BackgroundTransparency = 1
+    MinBtn.Text = "□"
+    MinBtn.TextColor3 = CurrentTheme.Text
+    MinBtn.TextSize = 20
+    MinBtn.Parent = TopBar
+    MinBtn.MouseButton1Click:Connect(function() MainFrame.Visible = not MainFrame.Visible end)
+
+    local MaxBtn = Instance.new("TextButton")
+    MaxBtn.Size = UDim2.new(0,30,0,30)
+    MaxBtn.Position = UDim2.new(1,-90,0.5,-15)
+    MaxBtn.BackgroundTransparency = 1
+    MaxBtn.Text = "□"
+    MaxBtn.TextColor3 = CurrentTheme.Text
+    MaxBtn.TextSize = 20
+    MaxBtn.Parent = TopBar
+
+    local CloseBtn = Instance.new("TextButton")
+    CloseBtn.Size = UDim2.new(0,30,0,30)
+    CloseBtn.Position = UDim2.new(1,-50,0.5,-15)
+    CloseBtn.BackgroundTransparency = 1
+    CloseBtn.Text = "✕"
+    CloseBtn.TextColor3 = Color3.fromRGB(255,80,80)
+    CloseBtn.TextSize = 22
+    CloseBtn.Parent = TopBar
+    CloseBtn.MouseButton1Click:Connect(function() ScreenGui:Destroy() end)
+
+    local Sidebar = RoundedFrame(MainFrame, UDim2.new(0,160,1,-50), CurrentTheme.Sidebar, 16)
+    Sidebar.Position = UDim2.new(0,0,0,50)
+
+    local Content = RoundedFrame(MainFrame, UDim2.new(1,-160,1,-50), CurrentTheme.Background, 16)
+    Content.Position = UDim2.new(0,160,0,50)
+
+    self.ScreenGui = ScreenGui
+    self.MainFrame = MainFrame
+    self.Sidebar = Sidebar
+    self.Content = Content
+    self.Tabs = {}
+    self.CurrentTab = nil
+
+    local SearchBox = Instance.new("TextBox")
+    SearchBox.Size = UDim2.new(1,-20,0,30)
+    SearchBox.Position = UDim2.new(0,10,0,10)
+    SearchBox.PlaceholderText = "Search..."
+    SearchBox.BackgroundColor3 = Color3.fromRGB(30,30,35)
+    SearchBox.TextColor3 = Color3.new(1,1,1)
+    SearchBox.Font = Enum.Font.Gotham
+    SearchBox.Parent = Sidebar
+
+    MainFrame.Visible = true
+    TweenService:Create(MainFrame, TweenInfo.new(0.6, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {Size = UDim2.new(0,680,0,480)}):Play()
+    TweenService:Create(MainFrame, TweenInfo.new(0.6), {BackgroundTransparency = 0.15}):Play()
+
+    function self:NewTab(tabName)
+        local tab = {}
+        local button = RoundedButton(Sidebar, tabName, CurrentTheme.Button)
+        button.Position = UDim2.new(0,10,0,0)
+        button.Size = UDim2.new(1,-20,0,42)
+
+        local tabContent = RoundedFrame(Content, UDim2.new(1,0,1,0), CurrentTheme.Background, 16)
+        tabContent.Visible = false
+
+        button.MouseButton1Click:Connect(function()
+            if self.CurrentTab then self.CurrentTab.Content.Visible = false end
+            tabContent.Visible = true
+            self.CurrentTab = tab
+        end)
+
+        tab.Content = tabContent
+        tab.Sections = {}
+        table.insert(self.Tabs, tab)
+        if #self.Tabs == 1 then
+            tabContent.Visible = true
+            self.CurrentTab = tab
+        end
+        return tab
+    end
+
+    function self:NewSection(tab, sectionName)
+        local section = {}
+        local sectionFrame = RoundedFrame(tab.Content, UDim2.new(1,-24,0,40), CurrentTheme.Sidebar, 8)
+        sectionFrame.Position = UDim2.new(0,12,0,0)
+
+        local title = Instance.new("TextLabel")
+        title.Size = UDim2.new(1,-20,1,0)
+        title.BackgroundTransparency = 1
+        title.Text = sectionName
+        title.TextColor3 = CurrentTheme.Text
+        title.TextXAlignment = Enum.TextXAlignment.Left
+        title.Font = Enum.Font.GothamBold
+        title.TextSize = 15
+        title.Parent = sectionFrame
+
+        section.Frame = sectionFrame
+        section.Elements = {}
+
+        function section:NewButton(text, info, callback)
+            local btn = RoundedButton(sectionFrame, text, CurrentTheme.Button)
+            btn.Size = UDim2.new(1,-20,0,42)
+            btn.Parent = sectionFrame
+            table.insert(section.Elements, btn)
+            return btn
+        end
+
+        function section:NewLabel(text)
+            local lbl = Instance.new("TextLabel")
+            lbl.Size = UDim2.new(1,-20,0,30)
+            lbl.BackgroundTransparency = 1
+            lbl.Text = text
+            lbl.TextColor3 = CurrentTheme.SecondaryText
+            lbl.TextXAlignment = Enum.TextXAlignment.Left
+            lbl.Font = Enum.Font.Gotham
+            lbl.TextSize = 14
+            lbl.Parent = sectionFrame
+            table.insert(section.Elements, lbl)
+            return lbl
+        end
+
+        function section:NewToggle(text, callback)
+            local tog = SpringToggle(sectionFrame, text, false, callback)
+            table.insert(section.Elements, tog)
+            return tog
+        end
+
+        function section:NewSlider(text, min, max, default, callback)
+            local sl = DraggableSlider(sectionFrame, text, min, max, default, callback)
+            table.insert(section.Elements, sl)
+            return sl
+        end
+
+        return section
+    end
+
+    function self:Notify(title, text, duration)
+        local notif = RoundedFrame(ScreenGui, UDim2.new(0,280,0,80), CurrentTheme.Button, 12)
+        notif.Position = UDim2.new(1,-10,-1,10)
+        notif.BackgroundTransparency = 0.1
+
+        local nTitle = Instance.new("TextLabel")
+        nTitle.Size = UDim2.new(1,0,0,25)
+        nTitle.BackgroundTransparency = 1
+        nTitle.Text = title
+        nTitle.TextColor3 = CurrentTheme.Text
+        nTitle.Font = Enum.Font.GothamBold
+        nTitle.TextSize = 14
+        nTitle.Parent = notif
+
+        local nText = Instance.new("TextLabel")
+        nText.Size = UDim2.new(1,0,0,40)
+        nText.Position = UDim2.new(0,0,0,25)
+        nText.BackgroundTransparency = 1
+        nText.Text = text
+        nText.TextColor3 = CurrentTheme.SecondaryText
+        nText.Font = Enum.Font.Gotham
+        nText.TextSize = 13
+        nText.Parent = notif
+
+        TweenService:Create(notif, TweenInfo.new(0.4), {Position = UDim2.new(1,-10,0,10)}):Play()
+        task.delay(duration or 3, function()
+            TweenService:Create(notif, TweenInfo.new(0.4), {Position = UDim2.new(1,-10,-1,10)}):Play()
+            task.wait(0.4)
+            notif:Destroy()
+        end)
+    end
+
+    self.Keybinds = {}
+    UserInputService.InputBegan:Connect(function(i, g)
+        if g then return end
+        for _, bind in pairs(self.Keybinds) do
+            if bind.key == i.Key and bind.callback then bind.callback() end
+        end
+    end)
+
+    function self:SaveConfig()
+        local cfg = {}
+        for _, tab in pairs(self.Tabs) do
+            for _, sec in pairs(tab.Sections or {}) do
+                for _, elem in pairs(sec.Elements or {}) do
+                    if elem.State ~= nil then cfg[elem.Title or "toggle"] = elem.State end
+                    if elem.Value ~= nil then cfg[elem.Title or "slider"] = elem.Value end
+                end
+            end
+        end
+        writefile("aestheticlib_config.json", game:GetService("HttpService"):JSONEncode(cfg))
+        self:Notify("Config", "Saved to aestheticlib_config.json")
+    end
+
+    function self:LoadConfig()
+        if isfile("aestheticlib_config.json") then
+            local cfg = game:GetService("HttpService"):JSONDecode(readfile("aestheticlib_config.json"))
+            for _, tab in pairs(self.Tabs) do
+                for _, sec in pairs(tab.Sections or {}) do
+                    for _, elem in pairs(sec.Elements or {}) do
+                        if cfg[elem.Title or "toggle"] ~= nil then elem:Update(cfg[elem.Title or "toggle"]) end
+                        if cfg[elem.Title or "slider"] ~= nil then elem:Update(cfg[elem.Title or "slider"]) end
+                    end
+                end
+            end
+            self:Notify("Config", "Loaded from file")
+        end
+    end
+
+    MainFrame.Visible = true
+    return self
+end
+
+print("🚀 Aesthetic Library v2 loaded - Buttons fixed!")
+return Library
